@@ -32,7 +32,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
-import com.squareup.picasso.Transformation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -51,6 +50,9 @@ import com.example.awesomephotoframe.data.repository.MediaItem
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.ActivityResultLauncher
+
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -65,6 +67,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvTime: TextView
     private val handler = Handler(Looper.getMainLooper())
     private var lastDateString: String = ""
+
+    private lateinit var signInLauncher: ActivityResultLauncher<Intent>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +97,14 @@ class MainActivity : AppCompatActivity() {
 
         googleSignInClient = GoogleSignIn.getClient(this, gso)
 
+        signInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                val data = result.data
+                val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+                handleSignInResult(task)
+            }
+        }
+
         val billingManager = BillingManager(this)
         billingManager.startConnection {
             billingManager.queryPurchases { isPremium ->
@@ -115,7 +127,7 @@ class MainActivity : AppCompatActivity() {
         googleSignInClient.silentSignIn().addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 val account = task.result
-                updateUI(account)
+                invalidateOptionsMenu()
 
                 val authCode = account?.serverAuthCode
                 if (authCode != null) {
@@ -135,7 +147,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } else {
                 Log.w(TAG, "Silent sign-in failed", task.exception)
-                updateUI(null)
+                invalidateOptionsMenu()
             }
         }
 
@@ -217,12 +229,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun signIn() {
         val signInIntent = googleSignInClient.signInIntent
-        startActivityForResult(signInIntent, RC_SIGN_IN)
+        signInLauncher.launch(signInIntent)
     }
 
     private fun signOut() {
         googleSignInClient.signOut().addOnCompleteListener {
-            updateUI(null)
+            invalidateOptionsMenu()
+            // デフォルト写真に戻す
+            ivPhotoFrame.setImageResource(R.drawable.sample_photo)
         }
     }
 
@@ -238,7 +252,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val account = completedTask.getResult(ApiException::class.java)
             Log.d(TAG, "Sign-in successful: ${account.email}")
-            updateUI(account)
+            invalidateOptionsMenu()
 
             val authCode = account.serverAuthCode
             if (authCode != null) {
@@ -258,23 +272,8 @@ class MainActivity : AppCompatActivity() {
 
         } catch (e: ApiException) {
             Log.w(TAG, "Sign-in failed", e)
-            updateUI(null)
+            invalidateOptionsMenu()
         }
-    }
-
-
-    private fun updateUI(account: GoogleSignInAccount?) {
-        if (account != null) {
-//            tvUser.text = "Welcome, ${account.displayName}"
-//            findViewById<View>(R.id.sign_in_button).visibility = View.GONE
-//            findViewById<View>(R.id.sign_out_button).visibility = View.VISIBLE
-        } else {
-//            tvUser.text = "Not signed in"
-//            findViewById<View>(R.id.sign_in_button).visibility = View.VISIBLE
-//            findViewById<View>(R.id.sign_out_button).visibility = View.GONE
-        }
-
-        invalidateOptionsMenu()
     }
 
     suspend fun exchangeAuthCodeForAccessToken(
