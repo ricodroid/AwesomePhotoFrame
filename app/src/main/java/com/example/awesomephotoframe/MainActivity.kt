@@ -331,7 +331,8 @@ class MainActivity : AppCompatActivity() {
             Log.d("PhotosAPI", "Total media items fetched: ${allItems.size}")
 
             if (allItems.isNotEmpty()) {
-                val imageUrl = allItems.random().baseUrl + "=w2048-h2048"
+//                val imageUrl = allItems.random().baseUrl + "=w2048-h2048" // 安牌
+                val imageUrl = allItems.random().baseUrl + "=w4096-h4096" // 高画質
 
                 withContext(Dispatchers.Main) {
                     Glide.with(this@MainActivity)
