@@ -337,6 +337,7 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     Glide.with(this@MainActivity)
                         .load(imageUrl)
+                        .placeholder(ivPhotoFrame.drawable) // 現在表示中の画像をプレースホルダーとして使う
                         .fitCenter()
                         .into(ivPhotoFrame)
                 }
