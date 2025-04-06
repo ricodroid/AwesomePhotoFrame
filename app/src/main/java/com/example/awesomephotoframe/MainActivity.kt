@@ -420,8 +420,8 @@ class MainActivity : AppCompatActivity() {
                 CoroutineScope(Dispatchers.Main).launch {
                     fetchPhotosWithAccessToken(accessToken)
                 }
-                handler.postDelayed(this, 10 * 60 * 1000L) // 10分後
-//                handler.postDelayed(this, 3 * 1000L) // debug 3秒
+//                handler.postDelayed(this, 10 * 60 * 1000L) // 10分後
+                handler.postDelayed(this, 30 * 1000L) // 30秒
             }
         })
     }
