@@ -116,9 +116,10 @@ dependencies {
     implementation(libs.okhttp)
 
     // AdMob (Google 広告 SDK)
-    implementation("com.google.android.gms:play-services-ads:24.1.0")
+    implementation("com.google.android.gms:play-services-ads:23.0.0")
     implementation("com.squareup.picasso:picasso:2.8")
     implementation("com.google.android.gms:play-services-auth:20.7.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     implementation ("com.google.api-client:google-api-client-android:1.33.2")
     implementation ("com.google.http-client:google-http-client-gson:1.43.3")

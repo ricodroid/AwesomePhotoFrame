@@ -1,8 +1,10 @@
 package com.example.awesomephotoframe
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -52,6 +54,15 @@ import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResultLauncher
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import android.Manifest
+import androidx.core.app.ActivityCompat
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.Priority
+
 
 
 class MainActivity : AppCompatActivity() {
@@ -72,6 +83,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d("Lifecycle", "onCreate START")
         setContentView(R.layout.activity_main)
 
         ivPhotoFrame = findViewById(R.id.iv_photo_frame)
@@ -123,6 +135,21 @@ class MainActivity : AppCompatActivity() {
         updateDateTime() // 初期表示
         startClockUpdater() // 毎分更新（必要なら）
 
+        Log.d("TEST", "Start permission check")
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED) {
+            Log.d("TEST", "Permission granted")
+        } else {
+            Log.d("TEST", "Permission NOT granted")
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                1001
+            )
+        }
+
+
         // ログイン状態確認（silentSignIn を使って authCode を再取得）
         googleSignInClient.silentSignIn().addOnCompleteListener { task ->
             if (task.isSuccessful) {
@@ -159,6 +186,27 @@ class MainActivity : AppCompatActivity() {
         }
 
     }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == 1001) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d("Permission", "位置情報パーミッションが許可されました")
+                getCurrentLocation { lat, lon ->
+                    Log.d("Location", "取得成功: lat=$lat, lon=$lon")
+                    // 天気取得処理ここで呼んでもOK
+                }
+            } else {
+                Log.w("Permission", "位置情報パーミッションが拒否されました")
+            }
+        }
+    }
+
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu_main, menu)
@@ -218,6 +266,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("MissingPermission")
+    private fun getCurrentLocation(callback: (Double, Double) -> Unit) {
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                callback(location.latitude, location.longitude)
+            } else {
+                // fallback: force request update
+                val locationRequest = LocationRequest.create().apply {
+                    priority = Priority.PRIORITY_BALANCED_POWER_ACCURACY
+                    interval = 0
+                    numUpdates = 1
+                }
+
+                val locationCallback = object : LocationCallback() {
+                    override fun onLocationResult(result: LocationResult) {
+                        val newLoc = result.lastLocation
+                        if (newLoc != null) {
+                            callback(newLoc.latitude, newLoc.longitude)
+                        } else {
+                            Log.w("Location", "fallbackでも位置が取得できませんでした")
+                        }
+                        fusedLocationClient.removeLocationUpdates(this)
+                    }
+                }
+
+                fusedLocationClient.requestLocationUpdates(
+                    locationRequest,
+                    locationCallback,
+                    Looper.getMainLooper()
+                )
+            }
+        }.addOnFailureListener {
+            Log.e("Location", "位置情報の取得に失敗しました", it)
+        }
+    }
 
     override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
         val account = GoogleSignIn.getLastSignedInAccount(this)
