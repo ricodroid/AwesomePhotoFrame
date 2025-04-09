@@ -58,6 +58,10 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import android.Manifest
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.ViewModelProvider
+import com.example.awesomephotoframe.data.repository.PhotoRepository
+import com.example.awesomephotoframe.viewmodel.MainViewModel
+import com.example.awesomephotoframe.viewmodel.ViewModelFactory
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -78,6 +82,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvTime: TextView
     private val handler = Handler(Looper.getMainLooper())
     private var lastDateString: String = ""
+    private lateinit var viewModel: MainViewModel
+    private val repository = PhotoRepository()
 
     private lateinit var signInLauncher: ActivityResultLauncher<Intent>
 
@@ -89,6 +95,21 @@ class MainActivity : AppCompatActivity() {
         ivPhotoFrame = findViewById(R.id.iv_photo_frame)
         tvDate = findViewById(R.id.tv_date)
         tvTime = findViewById(R.id.tv_time)
+
+        viewModel = ViewModelProvider(
+            this,
+            ViewModelFactory(repository)
+        )[MainViewModel::class.java]
+
+        viewModel.photoUrl.observe(this) { url ->
+            if (url != null) {
+                Glide.with(this)
+                    .load(url)
+                    .placeholder(ivPhotoFrame.drawable)
+                    .fitCenter()
+                    .into(ivPhotoFrame)
+            }
+        }
 
         MobileAds.initialize(this) {}
 
@@ -149,42 +170,32 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-
-        // ログイン状態確認（silentSignIn を使って authCode を再取得）
+        // silent sign-in（ViewModel経由で処理）
         googleSignInClient.silentSignIn().addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 val account = task.result
                 invalidateOptionsMenu()
-
-                val authCode = account?.serverAuthCode
-                if (authCode != null) {
-                    CoroutineScope(Dispatchers.Main).launch {
-                        val accessToken = exchangeAuthCodeForAccessToken(
-                            authCode,
-                            BuildConfig.GOOGLE_CLIENT_ID,
-                            BuildConfig.GOOGLE_CLIENT_SECRET
-                        )
-                        if (accessToken != null) {
-                            fetchPhotosWithAccessToken(accessToken)
-                            startPhotoUpdater(accessToken)
-                        }
-                    }
-                } else {
-                    Log.w(TAG, "Silent sign-in succeeded, but serverAuthCode is null")
-                }
+                viewModel.handleSignInResult(account)
             } else {
                 Log.w(TAG, "Silent sign-in failed", task.exception)
                 invalidateOptionsMenu()
             }
         }
 
-
-
         val btnMenu = findViewById<ImageButton>(R.id.btn_menu)
         btnMenu.setOnClickListener { view ->
             showPopupMenu(view)
         }
 
+    }
+
+    private fun handleSignInResult(task: Task<GoogleSignInAccount>) {
+        try {
+            val account = task.getResult(ApiException::class.java)
+            viewModel.handleSignInResult(account)
+        } catch (e: ApiException) {
+            Log.w("SignIn", "Sign-in failed", e)
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -330,65 +341,6 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == RC_SIGN_IN) {
             val task = GoogleSignIn.getSignedInAccountFromIntent(data)
             handleSignInResult(task)
-        }
-    }
-
-    private fun handleSignInResult(completedTask: Task<GoogleSignInAccount>) {
-        try {
-            val account = completedTask.getResult(ApiException::class.java)
-            Log.d(TAG, "Sign-in successful: ${account.email}")
-            invalidateOptionsMenu()
-
-            val authCode = account.serverAuthCode
-            if (authCode != null) {
-                CoroutineScope(Dispatchers.Main).launch {
-                    val accessToken = exchangeAuthCodeForAccessToken(
-                        authCode,
-                        BuildConfig.GOOGLE_CLIENT_ID,
-                        BuildConfig.GOOGLE_CLIENT_SECRET
-                    )
-
-                    if (accessToken != null) {
-                        fetchPhotosWithAccessToken(accessToken)
-                        startPhotoUpdater(accessToken)
-                    }
-                }
-            }
-
-        } catch (e: ApiException) {
-            Log.w(TAG, "Sign-in failed", e)
-            invalidateOptionsMenu()
-        }
-    }
-
-    suspend fun exchangeAuthCodeForAccessToken(
-        authCode: String,
-        clientId: String,
-        clientSecret: String
-    ): String? = withContext(Dispatchers.IO) {
-        try {
-            val url = URL("https://oauth2.googleapis.com/token")
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.doOutput = true
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-
-            val postData = listOf(
-                "code" to authCode,
-                "client_id" to clientId,
-                "client_secret" to clientSecret,
-                "redirect_uri" to "",
-                "grant_type" to "authorization_code"
-            ).joinToString("&") { "${it.first}=${URLEncoder.encode(it.second, "UTF-8")}" }
-
-            conn.outputStream.use { it.write(postData.toByteArray()) }
-
-            val response = conn.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(response)
-            return@withContext json.getString("access_token")
-        } catch (e: Exception) {
-            Log.e("TokenExchange", "Failed to get access token", e)
-            return@withContext null
         }
     }
 
