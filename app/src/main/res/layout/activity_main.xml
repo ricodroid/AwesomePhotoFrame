@@ -64,6 +64,86 @@
             android:shadowRadius="6"
             android:textStyle="bold"
             android:padding="8dp"/>
+
+
+        <!-- ☁️ 天気情報（アイコン＋気温） -->
+        <LinearLayout
+            android:id="@+id/weather_info_container"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="4dp">
+
+
+            <ImageView
+                android:id="@+id/iv_weather_icon"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/baseline_assignment_ind_24"
+                android:contentDescription="Weather Icon"
+               />
+
+            <TextView
+                android:id="@+id/tv_temperature"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--°C"
+                android:textColor="#CCCCCC"
+                android:textSize="20sp"
+                android:paddingStart="8dp"
+                android:shadowColor="#FFFFFF"
+                android:shadowDx="0"
+                android:shadowDy="0"
+                android:shadowRadius="4"/>
+
+        </LinearLayout>
+
+        <!-- 湿度 -->
+        <TextView
+            android:id="@+id/tv_humidity"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Humidity: --%"
+            android:textColor="#CCCCCC"
+            android:textSize="14sp" />
+
+        <!-- 気圧 -->
+        <TextView
+            android:id="@+id/tv_pressure"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Pressure: --- hPa"
+            android:textColor="#CCCCCC"
+            android:textSize="14sp" />
+
+        <!-- 風速 -->
+        <TextView
+            android:id="@+id/tv_wind_speed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Wind: -- m/s"
+            android:textColor="#CCCCCC"
+            android:textSize="14sp" />
+
+        <!-- 雲量 -->
+        <TextView
+            android:id="@+id/tv_cloud"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cloud: --%"
+            android:textColor="#CCCCCC"
+            android:textSize="14sp" />
+
+        <!-- 露点 -->
+        <TextView
+            android:id="@+id/tv_dew_point"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Dew Point: --°C"
+            android:textColor="#CCCCCC"
+            android:textSize="14sp" />
+
     </LinearLayout>
 
     <!-- 🔻 広告＋ボタン（下部） -->

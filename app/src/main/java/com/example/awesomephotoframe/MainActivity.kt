@@ -55,15 +55,16 @@ import android.Manifest
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.ViewModelProvider
 import com.example.awesomephotoframe.data.repository.PhotoRepository
+import com.example.awesomephotoframe.data.repository.WeatherRepository
 import com.example.awesomephotoframe.viewmodel.MainViewModel
 import com.example.awesomephotoframe.viewmodel.ViewModelFactory
+import com.example.awesomephotoframe.viewmodel.WeatherViewModel
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
-
-
+import com.google.android.gms.tasks.CancellationTokenSource
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -75,10 +76,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ivPhotoFrame: ImageView
     private lateinit var tvDate: TextView
     private lateinit var tvTime: TextView
+    private lateinit var tvTemperature: TextView
+    private lateinit var ivWeatherIcon: ImageView
+    private lateinit var tvHumidity: TextView
+    private lateinit var tvWindSpeed: TextView
+    private lateinit var tvPressure: TextView
+    private lateinit var tvCloud: TextView
+    private lateinit var tvDewPoint: TextView
+
     private val handler = Handler(Looper.getMainLooper())
     private var lastDateString: String = ""
-    private lateinit var viewModel: MainViewModel
-    private val repository = PhotoRepository()
+    private lateinit var mainViewModel: MainViewModel
+    private lateinit var weatherViewModel: WeatherViewModel
+    private val weatherRepository = WeatherRepository()
+    private val photoRepository = PhotoRepository()
 
     private lateinit var signInLauncher: ActivityResultLauncher<Intent>
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -88,16 +99,6 @@ class MainActivity : AppCompatActivity() {
         .setMinUpdateIntervalMillis(5_000L)
         .build()
 
-
-    val locationCallback = object : LocationCallback() {
-        override fun onLocationResult(locationResult: LocationResult) {
-            val location = locationResult.lastLocation
-            if (location != null) {
-                Log.d("Location", "Lat: ${location.latitude}, Lng: ${location.longitude}")
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d("Lifecycle", "onCreate START")
@@ -106,13 +107,25 @@ class MainActivity : AppCompatActivity() {
         ivPhotoFrame = findViewById(R.id.iv_photo_frame)
         tvDate = findViewById(R.id.tv_date)
         tvTime = findViewById(R.id.tv_time)
+        tvTemperature = findViewById(R.id.tv_temperature)
+        ivWeatherIcon = findViewById(R.id.iv_weather_icon)
+        tvHumidity = findViewById(R.id.tv_humidity)
+        tvPressure = findViewById(R.id.tv_pressure)
+        tvWindSpeed = findViewById(R.id.tv_wind_speed)
+        tvCloud = findViewById(R.id.tv_cloud)
+        tvDewPoint = findViewById(R.id.tv_dew_point)
+        tvHumidity = findViewById(R.id.tv_humidity)
+        tvPressure = findViewById(R.id.tv_pressure)
+        tvWindSpeed = findViewById(R.id.tv_wind_speed)
+        tvCloud = findViewById(R.id.tv_cloud)
+        tvDewPoint = findViewById(R.id.tv_dew_point)
 
-        viewModel = ViewModelProvider(
-            this,
-            ViewModelFactory(repository)
-        )[MainViewModel::class.java]
+        val viewModelFactory = ViewModelFactory(photoRepository, weatherRepository)
 
-        viewModel.photoUrl.observe(this) { url ->
+        mainViewModel = ViewModelProvider(this, viewModelFactory)[MainViewModel::class.java]
+        weatherViewModel = ViewModelProvider(this, viewModelFactory)[WeatherViewModel::class.java]
+
+        mainViewModel.photoUrl.observe(this) { url ->
             if (url != null) {
                 Glide.with(this)
                     .load(url)
@@ -170,26 +183,36 @@ class MainActivity : AppCompatActivity() {
 
         Log.d("TEST", "Start permission check")
 
+// ↓これに書き換え
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            // パーミッションがない場合はリクエスト
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                1001 // 任意のリクエストコード
+                1001
             )
         } else {
-            // パーミッションが許可されているならロケーション取得
-            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+            fusedLocationClient.getCurrentLocation(
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                CancellationTokenSource().token
+            ).addOnSuccessListener { location ->
+                if (location != null) {
+                    Log.d("Location", "Lat: ${location.latitude}, Lng: ${location.longitude}")
+                    weatherViewModel.loadWeather(location.latitude, location.longitude)
+                }
+            }
         }
+
+
+
 
         // silent sign-in（ViewModel経由で処理）
         googleSignInClient.silentSignIn().addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 val account = task.result
                 invalidateOptionsMenu()
-                viewModel.handleSignInResult(account)
+                mainViewModel.handleSignInResult(account)
             } else {
                 Log.w(TAG, "Silent sign-in failed", task.exception)
                 invalidateOptionsMenu()
@@ -201,12 +224,54 @@ class MainActivity : AppCompatActivity() {
             showPopupMenu(view)
         }
 
+
+        weatherViewModel.weather.observe(this) { weather ->
+            val details = weather
+                .properties
+                .timeseries
+                .firstOrNull()
+                ?.data
+                ?.instant
+                ?.details
+
+            val symbolCode = weather
+                .properties
+                .timeseries
+                .firstOrNull()
+                ?.data
+                ?.next1Hours
+                ?.summary
+                ?.symbolCode
+
+            details?.let {
+                tvTemperature.text = "${it.airTemperature}°C"
+                tvHumidity.text = "Humidity: ${it.humidity ?: "--"}%"
+                tvPressure.text = "Pressure: ${it.airPressure ?: "--"} hPa"
+                tvWindSpeed.text = "Wind: ${it.windSpeed ?: "--"} m/s"
+                tvCloud.text = "Cloud: ${it.cloudFraction ?: "--"}%"
+                tvDewPoint.text = "Dew Point: ${it.dewPoint ?: "--"}°C"
+            }
+
+            // 例: symbol_code に応じて天気アイコン変更（簡易対応）
+            symbolCode?.let {
+                val iconRes = when {
+                    it.contains("clearsky") -> R.drawable.baseline_more_vert_24
+                    it.contains("cloudy") -> R.drawable.baseline_more_vert_24
+                    it.contains("rain") -> R.drawable.baseline_more_vert_24
+                    it.contains("snow") -> R.drawable.baseline_more_vert_24
+                    else -> R.drawable.baseline_assignment_ind_24 // デフォルト
+                }
+                ivWeatherIcon.setImageResource(iconRes)
+            }
+        }
+
+
     }
 
     private fun handleSignInResult(task: Task<GoogleSignInAccount>) {
         try {
             val account = task.getResult(ApiException::class.java)
-            viewModel.handleSignInResult(account)
+            mainViewModel.handleSignInResult(account)
         } catch (e: ApiException) {
             Log.w("SignIn", "Sign-in failed", e)
         }
@@ -220,7 +285,7 @@ class MainActivity : AppCompatActivity() {
             // 許可されたら再度リクエスト
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
-                fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+//                fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
             } else {
                 Log.w("Permission", "Location permission was not granted at runtime.")
             }
@@ -229,14 +294,6 @@ class MainActivity : AppCompatActivity() {
             Log.w("Permission", "Location permission was denied.")
         }
     }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        fusedLocationClient.removeLocationUpdates(locationCallback)
-        handler.removeCallbacksAndMessages(null) // handlerループも止めると◎
-    }
-
-
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu_main, menu)

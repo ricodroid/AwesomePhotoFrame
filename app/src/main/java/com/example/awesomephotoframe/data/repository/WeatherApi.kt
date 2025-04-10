@@ -1,10 +1,16 @@
 package com.example.awesomephotoframe.data.repository
 
 import com.example.awesomephotoframe.data.model.WeatherResponse
+import retrofit2.Response
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Query
 
 interface WeatherApi {
-    @GET("v3/e7f7a5b4-8ca9-475d-8e9b-f0bdfb562ea6")
-    suspend fun getWeather(): WeatherResponse
+    @GET("locationforecast/2.0/compact")
+    suspend fun getWeatherData(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double,
+        @Header("User-Agent") userAgent: String = "AwesomePhotoFrame/1.0 contact@example.com"
+    ): Response<WeatherResponse>
 }
