@@ -1,6 +1,5 @@
 package com.example.awesomephotoframe
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -38,12 +37,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -62,6 +57,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.awesomephotoframe.data.repository.PhotoRepository
 import com.example.awesomephotoframe.viewmodel.MainViewModel
 import com.example.awesomephotoframe.viewmodel.ViewModelFactory
+import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -77,7 +73,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var googleSignInClient: GoogleSignInClient
     private lateinit var ivPhotoFrame: ImageView
-//    private lateinit var tvUser: TextView
     private lateinit var tvDate: TextView
     private lateinit var tvTime: TextView
     private val handler = Handler(Looper.getMainLooper())
@@ -86,6 +81,22 @@ class MainActivity : AppCompatActivity() {
     private val repository = PhotoRepository()
 
     private lateinit var signInLauncher: ActivityResultLauncher<Intent>
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+
+
+    val locationRequest = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 10_000L)
+        .setMinUpdateIntervalMillis(5_000L)
+        .build()
+
+
+    val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(locationResult: LocationResult) {
+            val location = locationResult.lastLocation
+            if (location != null) {
+                Log.d("Location", "Lat: ${location.latitude}, Lng: ${location.longitude}")
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,6 +123,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         MobileAds.initialize(this) {}
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         val adView = findViewById<AdView>(R.id.adView)
         val adRequest = AdRequest.Builder().build()
@@ -158,16 +170,18 @@ class MainActivity : AppCompatActivity() {
 
         Log.d("TEST", "Start permission check")
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED) {
-            Log.d("TEST", "Permission granted")
-        } else {
-            Log.d("TEST", "Permission NOT granted")
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            // パーミッションがない場合はリクエスト
             ActivityCompat.requestPermissions(
                 this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                1001
+                1001 // 任意のリクエストコード
             )
+        } else {
+            // パーミッションが許可されているならロケーション取得
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
         }
 
         // silent sign-in（ViewModel経由で処理）
@@ -198,25 +212,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        if (requestCode == 1001) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.d("Permission", "位置情報パーミッションが許可されました")
-                getCurrentLocation { lat, lon ->
-                    Log.d("Location", "取得成功: lat=$lat, lon=$lon")
-                    // 天気取得処理ここで呼んでもOK
-                }
+        if (requestCode == 1001 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            // 許可されたら再度リクエスト
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED) {
+                fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
             } else {
-                Log.w("Permission", "位置情報パーミッションが拒否されました")
+                Log.w("Permission", "Location permission was not granted at runtime.")
             }
+
+        } else {
+            Log.w("Permission", "Location permission was denied.")
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+        handler.removeCallbacksAndMessages(null) // handlerループも止めると◎
+    }
+
 
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -277,44 +296,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private fun getCurrentLocation(callback: (Double, Double) -> Unit) {
-        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
-        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            if (location != null) {
-                callback(location.latitude, location.longitude)
-            } else {
-                // fallback: force request update
-                val locationRequest = LocationRequest.create().apply {
-                    priority = Priority.PRIORITY_BALANCED_POWER_ACCURACY
-                    interval = 0
-                    numUpdates = 1
-                }
-
-                val locationCallback = object : LocationCallback() {
-                    override fun onLocationResult(result: LocationResult) {
-                        val newLoc = result.lastLocation
-                        if (newLoc != null) {
-                            callback(newLoc.latitude, newLoc.longitude)
-                        } else {
-                            Log.w("Location", "fallbackでも位置が取得できませんでした")
-                        }
-                        fusedLocationClient.removeLocationUpdates(this)
-                    }
-                }
-
-                fusedLocationClient.requestLocationUpdates(
-                    locationRequest,
-                    locationCallback,
-                    Looper.getMainLooper()
-                )
-            }
-        }.addOnFailureListener {
-            Log.e("Location", "位置情報の取得に失敗しました", it)
-        }
-    }
-
     override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
         val account = GoogleSignIn.getLastSignedInAccount(this)
         menu?.findItem(R.id.action_sign_in)?.isVisible = account == null
@@ -333,14 +314,6 @@ class MainActivity : AppCompatActivity() {
             invalidateOptionsMenu()
             // デフォルト写真に戻す
             ivPhotoFrame.setImageResource(R.drawable.sample_photo)
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == RC_SIGN_IN) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            handleSignInResult(task)
         }
     }
 
@@ -517,7 +490,7 @@ class MainActivity : AppCompatActivity() {
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                     val productDetailsParams = QueryProductDetailsParams.Product.newBuilder()
-                        .setProductId("premium_upgrade")// TODO
+                        .setProductId("premium_upgrade")
                         .setProductType(BillingClient.ProductType.INAPP)
                         .build()
 
