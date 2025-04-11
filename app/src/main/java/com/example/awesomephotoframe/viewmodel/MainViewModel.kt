@@ -15,7 +15,7 @@ class MainViewModel(private val repository: PhotoRepository) : ViewModel() {
     private val _photoUrl = MutableLiveData<String?>()
     val photoUrl: LiveData<String?> = _photoUrl
 
-    fun handleSignInResult(account: GoogleSignInAccount) {
+    fun handleSignInResult(account: GoogleSignInAccount, onTokenReady: (String) -> Unit) {
         val authCode = account.serverAuthCode ?: return
         viewModelScope.launch {
             val token = repository.exchangeAuthCodeForAccessToken(
@@ -25,6 +25,7 @@ class MainViewModel(private val repository: PhotoRepository) : ViewModel() {
             )
             if (token != null) {
                 fetchPhoto(token)
+                onTokenReady(token)
             }
         }
     }

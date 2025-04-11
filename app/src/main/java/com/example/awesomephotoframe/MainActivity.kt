@@ -94,11 +94,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var signInLauncher: ActivityResultLauncher<Intent>
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
-
-    val locationRequest = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 10_000L)
-        .setMinUpdateIntervalMillis(5_000L)
-        .build()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d("Lifecycle", "onCreate START")
@@ -109,11 +104,6 @@ class MainActivity : AppCompatActivity() {
         tvTime = findViewById(R.id.tv_time)
         tvTemperature = findViewById(R.id.tv_temperature)
         ivWeatherIcon = findViewById(R.id.iv_weather_icon)
-        tvHumidity = findViewById(R.id.tv_humidity)
-        tvPressure = findViewById(R.id.tv_pressure)
-        tvWindSpeed = findViewById(R.id.tv_wind_speed)
-        tvCloud = findViewById(R.id.tv_cloud)
-        tvDewPoint = findViewById(R.id.tv_dew_point)
         tvHumidity = findViewById(R.id.tv_humidity)
         tvPressure = findViewById(R.id.tv_pressure)
         tvWindSpeed = findViewById(R.id.tv_wind_speed)
@@ -159,7 +149,15 @@ class MainActivity : AppCompatActivity() {
             if (result.resultCode == RESULT_OK) {
                 val data = result.data
                 val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-                handleSignInResult(task)
+
+                try {
+                    val account = task.getResult(ApiException::class.java)
+                    mainViewModel.handleSignInResult(account) { token ->
+                        startPhotoUpdater(token)
+                    }
+                } catch (e: ApiException) {
+                    Log.w("SignIn", "Sign-in failed", e)
+                }
             }
         }
 
@@ -183,7 +181,6 @@ class MainActivity : AppCompatActivity() {
 
         Log.d("TEST", "Start permission check")
 
-// ↓これに書き換え
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED
         ) {
@@ -204,15 +201,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-
-
-
         // silent sign-in（ViewModel経由で処理）
         googleSignInClient.silentSignIn().addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 val account = task.result
                 invalidateOptionsMenu()
-                mainViewModel.handleSignInResult(account)
+                mainViewModel.handleSignInResult(account) { token ->
+                    startPhotoUpdater(token)
+                }
             } else {
                 Log.w(TAG, "Silent sign-in failed", task.exception)
                 invalidateOptionsMenu()
@@ -223,7 +219,6 @@ class MainActivity : AppCompatActivity() {
         btnMenu.setOnClickListener { view ->
             showPopupMenu(view)
         }
-
 
         weatherViewModel.weather.observe(this) { weather ->
             val details = weather
@@ -267,16 +262,6 @@ class MainActivity : AppCompatActivity() {
 
 
     }
-
-    private fun handleSignInResult(task: Task<GoogleSignInAccount>) {
-        try {
-            val account = task.getResult(ApiException::class.java)
-            mainViewModel.handleSignInResult(account)
-        } catch (e: ApiException) {
-            Log.w("SignIn", "Sign-in failed", e)
-        }
-    }
-
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -351,6 +336,18 @@ class MainActivity : AppCompatActivity() {
         } else {
             Toast.makeText(this, "Not signed in", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun startPhotoUpdater(accessToken: String) {
+        handler.post(object : Runnable {
+            override fun run() {
+                CoroutineScope(Dispatchers.Main).launch {
+                    fetchPhotosWithAccessToken(accessToken)
+                }
+//                handler.postDelayed(this, 10 * 60 * 1000L) // 10分後
+                handler.postDelayed(this, 30 * 1000L) // 30秒
+            }
+        })
     }
 
     override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
@@ -479,18 +476,6 @@ class MainActivity : AppCompatActivity() {
                 updateDateTime()
                 // 1分ごとに再実行（60,000ミリ秒）
                 handler.postDelayed(this, 60_000L)
-            }
-        })
-    }
-
-    private fun startPhotoUpdater(accessToken: String) {
-        handler.post(object : Runnable {
-            override fun run() {
-                CoroutineScope(Dispatchers.Main).launch {
-                    fetchPhotosWithAccessToken(accessToken)
-                }
-//                handler.postDelayed(this, 10 * 60 * 1000L) // 10分後
-                handler.postDelayed(this, 30 * 1000L) // 30秒
             }
         })
     }
