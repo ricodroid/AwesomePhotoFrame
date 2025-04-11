@@ -11,6 +11,6 @@ interface WeatherApi {
     suspend fun getWeatherData(
         @Query("lat") lat: Double,
         @Query("lon") lon: Double,
-        @Header("User-Agent") userAgent: String = "AwesomePhotoFrame/1.0 contact@example.com"
+        @Header("User-Agent") userAgent: String = "AwesomePhotoFrame/1.0 ricodroid2024@gmail.com"
     ): Response<WeatherResponse>
 }
